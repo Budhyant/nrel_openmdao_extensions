@@ -3,7 +3,7 @@ python:
   - "3.8"
 
 install: 
-  - pip install openmdao nlopt 
+  - pip install openmdao nlopt testflo
   - pip install -e .
   - pip list
 
