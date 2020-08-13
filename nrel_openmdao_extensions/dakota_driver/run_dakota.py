@@ -1,6 +1,22 @@
+import os
 import subprocess
 
 
+template_dir = 'template_dir/'
+
+if not os.path.exists(template_dir):
+    os.makedirs(template_dir)
+    
+subprocess.call("rm *.in", shell=True)
+subprocess.call("rm *.out", shell=True)
+subprocess.call("rm *.rst", shell=True)
+subprocess.call("rm *.dat", shell=True)
+subprocess.call("rm -rf run_history", shell=True)
+
+desvars = ['x', 'y']
+outputs = ['obj']
+
+  # Terrible string-list manipulation to get the DVs and outputs formatted correctly
 input_file = '''
 # Dakota input file
 environment
@@ -11,8 +27,10 @@ method
   coliny_cobyla 
 
 variables
-  continuous_design 2
-  descriptors "x" "y"
+''' \
+f'  continuous_design {len(desvars)}\n' \
+'  descriptors ' + " ".join(['\"' + i + '\"' for i in desvars]) + \
+'''
   lower_bounds 3 2
   upper_bounds 8 10
 
@@ -22,8 +40,9 @@ interface
     evaluation_concurrency 1
     parameters_file "params.in"
     results_file "results.out"
-    copy_files "template_dir/*"
-
+''' \
+f'    copy_files "{template_dir}*"' + \
+'''
     analysis_driver "python openmdao_driver.py"
 
     work_directory
@@ -33,21 +52,95 @@ interface
       file_save
 
 responses
-  objective_functions = 1
-  # nonlinear_equality_constraints = 1
-  descriptors "obj"
+''' \
+f'  objective_functions {len(outputs)}\n' \
+'  descriptors ' + " ".join(['\"' + i + '\"' for i in outputs]) + \
+'''
   no_gradients
   no_hessians
 '''
 
-subprocess.call("rm *.in", shell=True)
-subprocess.call("rm *.out", shell=True)
-subprocess.call("rm *.rst", shell=True)
-subprocess.call("rm *.dat", shell=True)
-subprocess.call("rm -rf run_history", shell=True)
+
 
 with open("dakota_input.in", "w") as text_file:
     text_file.write(input_file)
+    
+# Create template dir
+
+# Populate input.yml
+input_lines = [f'{i}: {{{i}}}' for i in desvars]
+with open(template_dir + "input_template.yml", "w") as f:
+    for line in input_lines:
+        f.write(line + '\n')
+
+# Create openmdao_driver.py
+driver_file = '''
+# Import  modules
+import sys
+from subprocess import call
+import numpy as np
+from yaml import safe_load
+
+
+#########################################
+#                                       #
+#    Step 1: Use Dakota created         #
+#    input files to prepare for         #
+#    model run.                         #
+#                                       #
+#########################################
+input_template = "input_template.yml"
+inputs = "inputs.yml"
+call(["dprepro", sys.argv[1], input_template, inputs])
+call(['rm', input_template])
+
+#########################################
+#                                       #
+#    Step 2: Run Model                  #
+#                                       #
+#########################################
+# Load parameters from the yaml formatted input.
+with open(inputs, "r") as f:
+    params = safe_load(f)
+    x = float(params["x"])
+    y = float(params["y"])
+
+import openmdao.api as om
+
+# build the model
+prob = om.Problem()
+
+prob.model.add_subsystem('paraboloid', om.ExecComp('f = (x-3)**2 + x*y + (y+4)**2 - 3'))
+
+prob.setup(derivatives=False)
+
+# Set initial values.
+prob.set_val('paraboloid.x', x)
+prob.set_val('paraboloid.y', y)
+
+prob.run_model()
+
+# minimum value
+obj = prob.get_val('paraboloid.f')[0]
+
+print(x, y, obj)
+
+#########################################
+#                                       #
+#    Step 3: Write Output in format     #
+#    Dakota expects                     #
+#                                       #
+#########################################
+
+# Write it to the expected file.
+with open(sys.argv[2], "w") as fp:
+    fp.write(str(obj) + '\\n')
+
+'''
+
+with open(template_dir + "openmdao_driver.py", "w") as text_file:
+    text_file.write(driver_file)
+
 
 subprocess.call("dakota -i dakota_input.in -o dakota_output.out -write_restart dakota_restart.rst", shell=True)
 subprocess.call("dakota_restart_util to_tabular dakota_restart.rst dakota_data.dat", shell=True)
