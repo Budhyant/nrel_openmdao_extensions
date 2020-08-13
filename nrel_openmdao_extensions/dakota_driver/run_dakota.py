@@ -72,8 +72,31 @@ input_lines = [f'{i}: {{{i}}}' for i in desvars]
 with open(template_dir + "input_template.yml", "w") as f:
     for line in input_lines:
         f.write(line + '\n')
-
+        
+        
 # Create openmdao_driver.py
+analysis_text_block = '''
+import openmdao.api as om
+
+prob = om.Problem()
+
+prob.model.add_subsystem('paraboloid', om.ExecComp('f = (x-3)**2 + x*y + (y+4)**2 - 3'))
+
+prob.setup()
+
+prob.set_val('paraboloid.x', float(desvars['x']))
+prob.set_val('paraboloid.y', float(desvars['y']))
+
+prob.run_model()
+
+# minimum value
+obj = prob.get_val('paraboloid.f')[0]
+
+outputs = [obj]
+
+print(float(desvars['x']), float(desvars['y']), obj)
+'''
+
 driver_file = '''
 # Import  modules
 import sys
@@ -101,30 +124,10 @@ call(['rm', input_template])
 #########################################
 # Load parameters from the yaml formatted input.
 with open(inputs, "r") as f:
-    params = safe_load(f)
-    x = float(params["x"])
-    y = float(params["y"])
-
-import openmdao.api as om
-
-# build the model
-prob = om.Problem()
-
-prob.model.add_subsystem('paraboloid', om.ExecComp('f = (x-3)**2 + x*y + (y+4)**2 - 3'))
-
-prob.setup(derivatives=False)
-
-# Set initial values.
-prob.set_val('paraboloid.x', x)
-prob.set_val('paraboloid.y', y)
-
-prob.run_model()
-
-# minimum value
-obj = prob.get_val('paraboloid.f')[0]
-
-print(x, y, obj)
-
+    desvars = safe_load(f)
+''' + \
+analysis_text_block + \
+'''
 #########################################
 #                                       #
 #    Step 3: Write Output in format     #
@@ -133,9 +136,9 @@ print(x, y, obj)
 #########################################
 
 # Write it to the expected file.
-with open(sys.argv[2], "w") as fp:
-    fp.write(str(obj) + '\\n')
-
+with open(sys.argv[2], "w") as f:
+    for output in outputs:
+        f.write(str(output) + '\\n')
 '''
 
 with open(template_dir + "openmdao_driver.py", "w") as text_file:
