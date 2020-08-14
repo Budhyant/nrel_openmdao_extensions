@@ -55,6 +55,7 @@ def create_input_file(template_dir, desvars, outputs, bounds):
 
     method
       coliny_cobyla 
+        max_function_evaluations = 30
 
     variables
     ''') + \
@@ -114,7 +115,7 @@ def create_driver_file(template_dir, model_string, desvar_shapes, desired_output
     for i, key in enumerate(desired_outputs):
         string = f'f.write(str(float(outputs["{key}"]) * {output_scalers[i]}))'
         write_outputs_string.append(string)
-    print(write_outputs_string)
+        
     write_outputs_string = """
     {}
     """.format("\n".join(write_outputs_string))
