@@ -1,6 +1,7 @@
 import os
 import subprocess
 import textwrap
+import numpy as np
 
 
 def setup_directories(template_dir):
@@ -13,8 +14,18 @@ def setup_directories(template_dir):
     subprocess.call("rm *.dat", shell=True)
     subprocess.call("rm -rf run_history", shell=True)
 
-def create_input_file(template_dir, desvars, outputs):
-      # Terrible string-list manipulation to get the DVs and outputs formatted correctly
+def create_input_file(template_dir, desvars, outputs, bounds):
+    flattened_bounds = []
+
+    for key, value in bounds.items():
+        if isinstance(value, (float, list)):
+            value = np.array(value)
+        flattened_value = np.squeeze(value.flatten()).reshape(-1, 2)
+        flattened_bounds.extend(flattened_value)
+
+    flattened_bounds = np.array(flattened_bounds)
+    
+    # Terrible string-list manipulation to get the DVs and outputs formatted correctly
     input_file = textwrap.dedent('''\
     # Dakota input file
     environment
@@ -27,11 +38,10 @@ def create_input_file(template_dir, desvars, outputs):
     variables
     ''') + \
     f'  continuous_design {len(desvars)}\n' \
-    '  descriptors ' + " ".join(['\"' + i + '\"' for i in desvars]) + \
+    '  descriptors ' + " ".join(['\"' + key + '\"' for key in desvars]) + '\n' + \
+    f'  lower_bounds ' + " ".join([str(i) for i in flattened_bounds[:, 0]]) + '\n' + \
+    f'  upper_bounds ' + " ".join([str(i) for i in flattened_bounds[:, 1]]) + \
     textwrap.dedent('''
-      lower_bounds 3 2
-      upper_bounds 8 10
-
     interface
       fork
         asynchronous
@@ -52,47 +62,24 @@ def create_input_file(template_dir, desvars, outputs):
     responses
     ''') + \
     f'  objective_functions {len(outputs)}\n' \
-    '  descriptors ' + " ".join(['\"' + i + '\"' for i in outputs]) + \
+    '  descriptors ' + " ".join(['\"' + key + '\"' for key in outputs]) + \
     '''
   no_gradients
   no_hessians
     '''
-
 
     with open("dakota_input.in", "w") as text_file:
         text_file.write(input_file)
     
 def create_input_yaml(template_dir, desvars):
     # Populate input.yml
-    input_lines = [f'{i}: {{{i}}}' for i in desvars]
+    input_lines = [f'{key}: {{{key}}}' for key in desvars]
     with open(template_dir + "input_template.yml", "w") as f:
         for line in input_lines:
             f.write(line + '\n')
         
-def create_driver_file(template_dir):
+def create_driver_file(template_dir, model_string):
     # Create openmdao_driver.py
-    analysis_text_block = textwrap.dedent('''\
-    import openmdao.api as om
-
-    prob = om.Problem()
-
-    prob.model.add_subsystem('paraboloid', om.ExecComp('f = (x-3)**2 + x*y + (y+4)**2 - 3'))
-
-    prob.setup()
-
-    prob.set_val('paraboloid.x', float(desvars['x']))
-    prob.set_val('paraboloid.y', float(desvars['y']))
-
-    prob.run_model()
-
-    # minimum value
-    obj = prob.get_val('paraboloid.f')[0]
-
-    outputs = [obj]
-
-    print(float(desvars['x']), float(desvars['y']), obj)
-    ''')
-
     driver_file = textwrap.dedent('''\
     # Import  modules
     import sys
@@ -121,9 +108,18 @@ def create_driver_file(template_dir):
     # Load parameters from the yaml formatted input.
     with open(inputs, "r") as f:
         desvars = safe_load(f)
+        
+    for key in desvars:
+        desvars[key] = float(desvars[key])
+        
+    print()
+    print('Design variables:')
+    print(desvars)
     ''') + \
-    analysis_text_block + \
+    model_string + '\n' + \
     textwrap.dedent('''\
+    model_instance = model(desvars)
+    outputs = model_instance.compute(desvars)
     #########################################
     #                                       #
     #    Step 3: Write Output in format     #
@@ -131,10 +127,12 @@ def create_driver_file(template_dir):
     #                                       #
     #########################################
 
+    print('Outputs:')
+    print(outputs)
     # Write it to the expected file.
     with open(sys.argv[2], "w") as f:
-        for output in outputs:
-            f.write(str(output) + '\\n')
+        for key in outputs:
+            f.write(str(outputs[key]) + '\\n')
     ''')
 
     with open(template_dir + "openmdao_driver.py", "w") as text_file:
@@ -144,14 +142,20 @@ def run_dakota():
     subprocess.call("dakota -i dakota_input.in -o dakota_output.out -write_restart dakota_restart.rst", shell=True)
     subprocess.call("dakota_restart_util to_tabular dakota_restart.rst dakota_data.dat", shell=True)
     
-    
+def do_full_optimization(template_dir, desvars, outputs, bounds, model_string):
+    setup_directories(template_dir)
+    create_input_file(template_dir, desvars, outputs, bounds)
+    create_input_yaml(template_dir, desvars)
+    create_driver_file(template_dir, model_string)
+    run_dakota()
+
+
 if __name__ == "__main__":
     template_dir = 'template_dir/'
-    desvars = ['x', 'y']
-    outputs = ['obj']
+    desvars = {'x' : np.array([0.25])}
+    bounds = {'x' : np.array([[0.0, 1.0]])}
+    outputs = ['y']
     
-    setup_directories(template_dir)
-    create_input_file(template_dir, desvars, outputs)
-    create_input_yaml(template_dir, desvars)
-    create_driver_file(template_dir)
-    run_dakota()
+    model_string = 'from multifidelity_studies.models.testbed_components import simple_1D_high_model as model'
+    
+    do_full_optimization(template_dir, desvars, outputs, bounds, model_string)
