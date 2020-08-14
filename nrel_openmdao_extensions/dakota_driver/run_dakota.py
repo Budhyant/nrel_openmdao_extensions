@@ -25,6 +25,27 @@ def create_input_file(template_dir, desvars, outputs, bounds):
 
     flattened_bounds = np.array(flattened_bounds)
     
+    desvar_labels = []
+    for key, value in desvars.items():
+        if isinstance(value, (float, list)):
+            value = np.array(value)
+        flattened_value = np.squeeze(value.flatten())
+        key = key.replace('.', '_')
+        for i in range(len(flattened_value)):
+            desvar_labels.append(f'{key}_{i}')
+            
+    desvar_shapes = {}
+    total_size = 0
+
+    for key, value in desvars.items():
+        if isinstance(value, (float, list)):
+            value = np.array(value)
+
+        desvar_shapes[key] = value.shape
+        total_size += value.size
+    
+    #### Flatten the DVs here and make names for each and append the names with the number according to the size of the DVs
+    
     # Terrible string-list manipulation to get the DVs and outputs formatted correctly
     input_file = textwrap.dedent('''\
     # Dakota input file
@@ -37,8 +58,7 @@ def create_input_file(template_dir, desvars, outputs, bounds):
 
     variables
     ''') + \
-    f'  continuous_design {len(desvars)}\n' \
-    '  descriptors ' + " ".join(['\"' + key + '\"' for key in desvars]) + '\n' + \
+    f'  continuous_design {len(flattened_bounds)}\n' + \
     f'  lower_bounds ' + " ".join([str(i) for i in flattened_bounds[:, 0]]) + '\n' + \
     f'  upper_bounds ' + " ".join([str(i) for i in flattened_bounds[:, 1]]) + \
     textwrap.dedent('''
@@ -71,14 +91,34 @@ def create_input_file(template_dir, desvars, outputs, bounds):
     with open("dakota_input.in", "w") as text_file:
         text_file.write(input_file)
     
-def create_input_yaml(template_dir, desvars):
+    return desvar_labels, desvar_shapes
+    
+def create_input_yaml(template_dir, desvar_labels):
     # Populate input.yml
-    input_lines = [f'{key}: {{{key}}}' for key in desvars]
+    input_lines = [f'cdv_{i+1}: {{cdv_{i+1}}}' for i in range(len(desvar_labels))]
     with open(template_dir + "input_template.yml", "w") as f:
         for line in input_lines:
             f.write(line + '\n')
         
-def create_driver_file(template_dir, model_string):
+def create_driver_file(template_dir, model_string, desvar_shapes, desired_outputs, output_scalers):
+    desvar_shapes_lines = []
+    for key in desvar_shapes:
+        desvar_shapes_lines.append(f'desvar_shapes["{key}"] = {desvar_shapes[key]}')
+    desvar_shapes_lines = """
+{}
+    """.format("\n".join(desvar_shapes_lines))
+    
+    desired_outputs_string = 'desired_outputs = [' + " ".join(['\"' + key + '\"' for key in desired_outputs]) + ']'
+    
+    write_outputs_string = []
+    for i, key in enumerate(desired_outputs):
+        string = f'f.write(str(float(outputs["{key}"]) * {output_scalers[i]}))'
+        write_outputs_string.append(string)
+    print(write_outputs_string)
+    write_outputs_string = """
+    {}
+    """.format("\n".join(write_outputs_string))
+        
     # Create openmdao_driver.py
     driver_file = textwrap.dedent('''\
     # Import  modules
@@ -109,9 +149,24 @@ def create_driver_file(template_dir, model_string):
     with open(inputs, "r") as f:
         desvars = safe_load(f)
         
+    desvars_list = []
     for key in desvars:
-        desvars[key] = float(desvars[key])
-        
+        desvars_list.append(float(desvars[key]))
+    flattened_desvars = np.array(desvars_list)
+    
+    desvar_shapes = {}
+    ''') + \
+    desvar_shapes_lines + \
+    textwrap.dedent('''
+    size_counter = 0
+    desvars = {}
+    for key, shape in desvar_shapes.items():
+        size = int(np.prod(shape))
+        desvars[key] = flattened_desvars[
+            size_counter : size_counter + size
+        ].reshape(shape)
+        size_counter += size
+
     print()
     print('Design variables:')
     print(desvars)
@@ -126,14 +181,14 @@ def create_driver_file(template_dir, model_string):
     #    Dakota expects                     #
     #                                       #
     #########################################
-
+    ''') + \
+    desired_outputs_string + '\n' + \
+    textwrap.dedent('''\
     print('Outputs:')
     print(outputs)
     # Write it to the expected file.
-    with open(sys.argv[2], "w") as f:
-        for key in outputs:
-            f.write(str(outputs[key]) + '\\n')
-    ''')
+    with open(sys.argv[2], "w") as f:''') + \
+    write_outputs_string
 
     with open(template_dir + "openmdao_driver.py", "w") as text_file:
         text_file.write(driver_file)
@@ -142,11 +197,11 @@ def run_dakota():
     subprocess.call("dakota -i dakota_input.in -o dakota_output.out -write_restart dakota_restart.rst", shell=True)
     subprocess.call("dakota_restart_util to_tabular dakota_restart.rst dakota_data.dat", shell=True)
     
-def do_full_optimization(template_dir, desvars, outputs, bounds, model_string):
+def do_full_optimization(template_dir, desvars, desired_outputs, bounds, model_string, output_scalers):
     setup_directories(template_dir)
-    create_input_file(template_dir, desvars, outputs, bounds)
-    create_input_yaml(template_dir, desvars)
-    create_driver_file(template_dir, model_string)
+    desvar_labels, desvar_shapes = create_input_file(template_dir, desvars, desired_outputs, bounds)
+    create_input_yaml(template_dir, desvar_labels)
+    create_driver_file(template_dir, model_string, desvar_shapes, desired_outputs, output_scalers)
     run_dakota()
 
 
@@ -155,7 +210,8 @@ if __name__ == "__main__":
     desvars = {'x' : np.array([0.25])}
     bounds = {'x' : np.array([[0.0, 1.0]])}
     outputs = ['y']
+    output_scalers = [1.] 
     
     model_string = 'from multifidelity_studies.models.testbed_components import simple_1D_high_model as model'
     
-    do_full_optimization(template_dir, desvars, outputs, bounds, model_string)
+    do_full_optimization(template_dir, desvars, outputs, bounds, model_string, output_scalers)
