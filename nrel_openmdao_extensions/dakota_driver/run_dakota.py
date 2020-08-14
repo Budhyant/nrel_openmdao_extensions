@@ -5,6 +5,9 @@ import numpy as np
 
 
 def setup_directories(template_dir):
+    """
+    Create the template_dir, remove previous files.
+    """
     if not os.path.exists(template_dir):
         os.makedirs(template_dir)
         
@@ -15,6 +18,13 @@ def setup_directories(template_dir):
     subprocess.call("rm -rf run_history", shell=True)
 
 def create_input_file(template_dir, desvars, outputs, bounds):
+    """
+    Create the Dakota input file based on the user-defined problem formulation.
+    
+    Basically, we need the number and size of design variables, their bounds,
+    and the functions of interest. Here is also where you set the optimization
+    method and termination criteria.
+    """
     flattened_bounds = []
 
     for key, value in bounds.items():
@@ -95,6 +105,10 @@ def create_input_file(template_dir, desvars, outputs, bounds):
     return desvar_labels, desvar_shapes
     
 def create_input_yaml(template_dir, desvar_labels):
+    """
+    Create the input yaml file which is just a file with a dictionary format
+    so that Dakota knows which design variables to populate in the problem.
+    """
     # Populate input.yml
     input_lines = [f'cdv_{i+1}: {{cdv_{i+1}}}' for i in range(len(desvar_labels))]
     with open(template_dir + "input_template.yml", "w") as f:
@@ -102,6 +116,14 @@ def create_input_yaml(template_dir, desvar_labels):
             f.write(line + '\n')
         
 def create_driver_file(template_dir, model_string, desvar_shapes, desired_outputs, output_scalers):
+    """
+    Create the Python file that actually runs the model analysis.
+    
+    Once created, this file will take in the design variables as set by Dakota
+    and output all functions of interest. This function that creates that file
+    needs the model definition (import statement), as well as the desvar sizes,
+    the list of desired outputs, and the output scalers.
+    """
     desvar_shapes_lines = []
     for key in desvar_shapes:
         desvar_shapes_lines.append(f'desvar_shapes["{key}"] = {desvar_shapes[key]}')
@@ -195,10 +217,17 @@ def create_driver_file(template_dir, model_string, desvar_shapes, desired_output
         text_file.write(driver_file)
 
 def run_dakota():
+    """
+    Actually run Dakota from the command line.
+    """
     subprocess.call("dakota -i dakota_input.in -o dakota_output.out -write_restart dakota_restart.rst", shell=True)
     subprocess.call("dakota_restart_util to_tabular dakota_restart.rst dakota_data.dat", shell=True)
     
 def do_full_optimization(template_dir, desvars, desired_outputs, bounds, model_string, output_scalers):
+    """
+    Helper function that calls all of the other functions to do the full
+    top-to-bottom optimization process.
+    """
     setup_directories(template_dir)
     desvar_labels, desvar_shapes = create_input_file(template_dir, desvars, desired_outputs, bounds)
     create_input_yaml(template_dir, desvar_labels)
