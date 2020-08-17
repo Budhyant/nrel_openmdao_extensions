@@ -54,14 +54,29 @@ def create_input_file(template_dir, desvars, outputs, bounds, options):
         desvar_shapes[key] = value.shape
         total_size += value.size
         
-    opt_options = {
-        'method' : 'coliny_cobyla',
-        'max_iterations' : 100,
-        'max_function_evaluations' : 200,
-        'initial_delta' : 0.5,
-    }
-    
-    opt_options.update(options)
+    if 'cobyla' in options['method']:
+        opt_options = {
+            'max_iterations' : 100,
+            'max_function_evaluations' : 200,
+            'initial_delta' : 0.5,
+        }
+        opt_options.update(options)
+        
+    elif 'efficient_global' in options['method']:
+        opt_options = {
+            'seed' : 123,
+        }
+        opt_options.update(options)
+        
+    method = opt_options.pop('method')
+        
+    options_string_list = []
+    for option, val in opt_options.items():
+        line = f'    {option} = {val}'
+        options_string_list.append(line)
+    options_string_lines = """
+{}
+    """.format("\n".join(options_string_list))
     
     #### Flatten the DVs here and make names for each and append the names with the number according to the size of the DVs
     
@@ -74,10 +89,8 @@ def create_input_file(template_dir, desvars, outputs, bounds, options):
 
     method
     ''') + \
-    f'  {opt_options["method"]}\n' + \
-    f'    max_iterations = {opt_options["max_iterations"]}\n' + \
-    f'    max_function_evaluations = {opt_options["max_function_evaluations"]}\n' + \
-    f'    initial_delta = {opt_options["initial_delta"]}\n' + \
+    f'  {method}' + \
+    options_string_lines + \
     textwrap.dedent('''
     variables
     ''') + \
@@ -85,6 +98,7 @@ def create_input_file(template_dir, desvars, outputs, bounds, options):
     f'  lower_bounds ' + " ".join([str(i) for i in flattened_bounds[:, 0]]) + '\n' + \
     f'  upper_bounds ' + " ".join([str(i) for i in flattened_bounds[:, 1]]) + \
     textwrap.dedent('''
+    
     interface
       fork
         asynchronous
