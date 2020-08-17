@@ -17,7 +17,7 @@ def setup_directories(template_dir):
     subprocess.call("rm *.dat", shell=True)
     subprocess.call("rm -rf run_history", shell=True)
 
-def create_input_file(template_dir, desvars, outputs, bounds):
+def create_input_file(template_dir, desvars, outputs, bounds, options):
     """
     Create the Dakota input file based on the user-defined problem formulation.
     
@@ -53,6 +53,15 @@ def create_input_file(template_dir, desvars, outputs, bounds):
 
         desvar_shapes[key] = value.shape
         total_size += value.size
+        
+    opt_options = {
+        'method' : 'coliny_cobyla',
+        'max_iterations' : 100,
+        'max_function_evaluations' : 200,
+        'initial_delta' : 0.5,
+    }
+    
+    opt_options.update(options)
     
     #### Flatten the DVs here and make names for each and append the names with the number according to the size of the DVs
     
@@ -64,9 +73,12 @@ def create_input_file(template_dir, desvars, outputs, bounds):
         tabular_data_file "dakota_data.dat"
 
     method
-      coliny_cobyla 
-        max_function_evaluations = 30
-
+    ''') + \
+    f'  {opt_options["method"]}\n' + \
+    f'    max_iterations = {opt_options["max_iterations"]}\n' + \
+    f'    max_function_evaluations = {opt_options["max_function_evaluations"]}\n' + \
+    f'    initial_delta = {opt_options["initial_delta"]}\n' + \
+    textwrap.dedent('''
     variables
     ''') + \
     f'  continuous_design {len(flattened_bounds)}\n' + \
@@ -223,13 +235,13 @@ def run_dakota():
     subprocess.call("dakota -i dakota_input.in -o dakota_output.out -write_restart dakota_restart.rst", shell=True)
     subprocess.call("dakota_restart_util to_tabular dakota_restart.rst dakota_data.dat", shell=True)
     
-def do_full_optimization(template_dir, desvars, desired_outputs, bounds, model_string, output_scalers):
+def do_full_optimization(template_dir, desvars, desired_outputs, bounds, model_string, output_scalers, options=None):
     """
     Helper function that calls all of the other functions to do the full
     top-to-bottom optimization process.
     """
     setup_directories(template_dir)
-    desvar_labels, desvar_shapes = create_input_file(template_dir, desvars, desired_outputs, bounds)
+    desvar_labels, desvar_shapes = create_input_file(template_dir, desvars, desired_outputs, bounds, options)
     create_input_yaml(template_dir, desvar_labels)
     create_driver_file(template_dir, model_string, desvar_shapes, desired_outputs, output_scalers)
     run_dakota()
@@ -240,8 +252,9 @@ if __name__ == "__main__":
     desvars = {'x' : np.array([0.25])}
     bounds = {'x' : np.array([[0.0, 1.0]])}
     outputs = ['y']
-    output_scalers = [1.] 
-    
+    output_scalers = [1.]
+    options = {}
+        
     model_string = 'from multifidelity_studies.models.testbed_components import simple_1D_high_model as model'
     
-    do_full_optimization(template_dir, desvars, outputs, bounds, model_string, output_scalers)
+    do_full_optimization(template_dir, desvars, outputs, bounds, model_string, output_scalers, options)
