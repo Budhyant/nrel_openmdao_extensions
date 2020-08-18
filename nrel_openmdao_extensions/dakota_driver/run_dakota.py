@@ -41,7 +41,7 @@ def create_input_file(template_dir, desvars, outputs, bounds, options):
             value = np.array(value)
         flattened_value = np.squeeze(value.flatten())
         key = key.replace('.', '_')
-        for i in range(len(flattened_value)):
+        for i in range(flattened_value.size):
             desvar_labels.append(f'{key}_{i}')
             
     desvar_shapes = {}
