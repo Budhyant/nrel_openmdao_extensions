@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from nrel_openmdao_extensions.dakota_driver import do_full_optimization
+from nrel_openmdao_extensions.dakota_driver import DakotaOptimizer
 from openmdao.utils.assert_utils import assert_near_equal
 
 try:
@@ -22,7 +22,8 @@ class TestDakotaOptimization(unittest.TestCase):
         options = {'method' : 'coliny_cobyla',
             'max_function_evaluations' : 3}
     
-        do_full_optimization(template_dir, desvars, outputs, bounds, model_string, output_scalers, options)
+        opt = DakotaOptimizer(template_dir)
+        opt.optimize(desvars, outputs, bounds, model_string, output_scalers, options)
     
         obj_values = []
         with open('dakota_data.dat') as f:
@@ -43,7 +44,8 @@ class TestDakotaOptimization(unittest.TestCase):
                    'method' : 'efficient_global',
                    'seed' : 123456}
     
-        do_full_optimization(template_dir, desvars, outputs, bounds, model_string, output_scalers, options)
+        opt = DakotaOptimizer(template_dir)
+        opt.optimize(desvars, outputs, bounds, model_string, output_scalers, options)
     
         obj_values = []
         with open('dakota_data.dat') as f:
@@ -63,7 +65,8 @@ class TestDakotaOptimization(unittest.TestCase):
         options = {'method' : 'coliny_cobyla',
             'max_function_evaluations' : 3}
     
-        do_full_optimization(template_dir, desvars, outputs, bounds, model_string, output_scalers, options)
+        opt = DakotaOptimizer(template_dir)
+        opt.optimize(desvars, outputs, bounds, model_string, output_scalers, options)
     
         obj_values = []
         with open('dakota_data.dat') as f:
@@ -72,7 +75,7 @@ class TestDakotaOptimization(unittest.TestCase):
                     obj_values.append(float(line.split()[4]))
     
         assert_near_equal(np.min(np.array(obj_values)), 1.0)
-        
+    
     def test_constraint(self):
         bounds = {'x' : np.array([[0.0, 1.0], [0.0, 1.0]])}
         desvars = {'x' : np.array([0., 0.25])}
@@ -83,7 +86,8 @@ class TestDakotaOptimization(unittest.TestCase):
         options = {'method' : 'coliny_cobyla',
             'max_function_evaluations' : 3}
     
-        do_full_optimization(template_dir, desvars, outputs, bounds, model_string, output_scalers, options)
+        opt = DakotaOptimizer(template_dir)
+        opt.optimize(desvars, outputs, bounds, model_string, output_scalers, options)
     
         obj_values = []
         with open('dakota_data.dat') as f:
@@ -92,7 +96,7 @@ class TestDakotaOptimization(unittest.TestCase):
                     obj_values.append(float(line.split()[4]))
     
         assert_near_equal(np.min(np.array(obj_values)), 0.5)
-        
+    
         con_values = []
         with open('dakota_data.dat') as f:
             for i, line in enumerate(f):
