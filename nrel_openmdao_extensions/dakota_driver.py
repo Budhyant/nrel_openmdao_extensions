@@ -12,7 +12,7 @@ class DakotaOptimizer():
         
     def optimize(self, desvars, desired_outputs, bounds, model_string, output_scalers, options=None):
         """
-        Helper function that calls all of the other functions to do the full
+        Helper method that calls all of the other methods to do the full
         top-to-bottom optimization process.
         """
         
@@ -20,6 +20,8 @@ class DakotaOptimizer():
         self.create_input_yaml(self.template_dir, desvar_labels)
         self.create_driver_file(self.template_dir, model_string, desvar_shapes, desired_outputs, output_scalers)
         self.run_dakota()
+        results = self.postprocess()
+        return results
 
     def setup_directories(self, template_dir):
         """
@@ -272,3 +274,30 @@ class DakotaOptimizer():
         subprocess.call("dakota -i dakota_input.in -o dakota_output.out -write_restart dakota_restart.rst", shell=True)
         subprocess.call("dakota_restart_util to_tabular dakota_restart.rst dakota_data.dat", shell=True)
     
+    def postprocess(self):
+        """
+        Postprocess the dakota_data.dat output file and create a dictionary
+        with run results.
+        """
+        
+        results = {}
+        key_list = []
+        with open('dakota_data.dat') as f:
+            for i, line in enumerate(f):
+                # Grab headers from first line
+                if i==0:
+                    for key in line.split():
+                        results[key] = []
+                        key_list.append(key)
+                if i > 0:
+                    split_line = line.split()
+                    for j, key in enumerate(key_list):
+                        try:
+                            # If it's a float, cast it as such
+                            column_entry = float(split_line[j])
+                        except ValueError:
+                            # If it's an actual string, keep it as a string
+                            column_entry = split_line[j]
+                        results[key].append(column_entry)
+                        
+        return results

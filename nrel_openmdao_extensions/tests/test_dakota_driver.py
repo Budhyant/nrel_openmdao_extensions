@@ -23,15 +23,9 @@ class TestDakotaOptimization(unittest.TestCase):
             'max_function_evaluations' : 3}
     
         opt = DakotaOptimizer(template_dir)
-        opt.optimize(desvars, outputs, bounds, model_string, output_scalers, options)
-    
-        obj_values = []
-        with open('dakota_data.dat') as f:
-            for i, line in enumerate(f):
-                if i > 0:
-                    obj_values.append(float(line.split()[4]))
-    
-        assert_near_equal(np.min(np.array(obj_values)), -9.5)
+        results = opt.optimize(desvars, outputs, bounds, model_string, output_scalers, options)
+        
+        assert_near_equal(np.min(np.array(results['y'])), -9.5)
     
     def test_2D_opt_EGO(self):
         bounds = {'x' : np.array([[0.0, 1.0], [0.0, 1.0]])}
@@ -45,15 +39,9 @@ class TestDakotaOptimization(unittest.TestCase):
                    'seed' : 123456}
     
         opt = DakotaOptimizer(template_dir)
-        opt.optimize(desvars, outputs, bounds, model_string, output_scalers, options)
+        results = opt.optimize(desvars, outputs, bounds, model_string, output_scalers, options)
     
-        obj_values = []
-        with open('dakota_data.dat') as f:
-            for i, line in enumerate(f):
-                if i > 0:
-                    obj_values.append(float(line.split()[4]))
-    
-        assert_near_equal(np.min(np.array(obj_values)), -9.999996864)
+        assert_near_equal(np.min(np.array(results['y'])), -9.999996864)
     
     def test_two_variables(self):
         bounds = {'x' : np.array([[0.0, 1.0], [0.0, 1.0]]), 'z' : [1.0, 2.0]}
@@ -66,15 +54,9 @@ class TestDakotaOptimization(unittest.TestCase):
             'max_function_evaluations' : 3}
     
         opt = DakotaOptimizer(template_dir)
-        opt.optimize(desvars, outputs, bounds, model_string, output_scalers, options)
+        results = opt.optimize(desvars, outputs, bounds, model_string, output_scalers, options)
     
-        obj_values = []
-        with open('dakota_data.dat') as f:
-            for i, line in enumerate(f):
-                if i > 0:
-                    obj_values.append(float(line.split()[4]))
-    
-        assert_near_equal(np.min(np.array(obj_values)), 1.0)
+        assert_near_equal(np.min(np.array(results['y'])), 1.0)
     
     def test_constraint(self):
         bounds = {'x' : np.array([[0.0, 1.0], [0.0, 1.0]])}
@@ -87,23 +69,10 @@ class TestDakotaOptimization(unittest.TestCase):
             'max_function_evaluations' : 3}
     
         opt = DakotaOptimizer(template_dir)
-        opt.optimize(desvars, outputs, bounds, model_string, output_scalers, options)
+        results = opt.optimize(desvars, outputs, bounds, model_string, output_scalers, options)
     
-        obj_values = []
-        with open('dakota_data.dat') as f:
-            for i, line in enumerate(f):
-                if i > 0:
-                    obj_values.append(float(line.split()[4]))
-    
-        assert_near_equal(np.min(np.array(obj_values)), 0.5)
-    
-        con_values = []
-        with open('dakota_data.dat') as f:
-            for i, line in enumerate(f):
-                if i > 0:
-                    con_values.append(float(line.split()[5]))
-    
-        assert_near_equal(np.min(np.array(con_values)), 0.0)
+        assert_near_equal(np.min(np.array(results['y'])), 0.5)
+        assert_near_equal(np.min(np.array(results['con'])), 0.0)
         
 
 if __name__ == "__main__":
