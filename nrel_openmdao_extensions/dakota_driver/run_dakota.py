@@ -78,6 +78,11 @@ def create_input_file(template_dir, desvars, outputs, bounds, options):
 {}
     """.format("\n".join(options_string_list))
     
+    if len(outputs) > 1:
+        constraints_string = f'  nonlinear_equality_constraints {len(outputs)-1}\n'
+    else:
+        constraints_string = ''
+    
     #### Flatten the DVs here and make names for each and append the names with the number according to the size of the DVs
     
     # Terrible string-list manipulation to get the DVs and outputs formatted correctly
@@ -117,8 +122,9 @@ def create_input_file(template_dir, desvars, outputs, bounds, options):
           file_save
 
     responses
+      objective_functions 1
     ''') + \
-    f'  objective_functions {len(outputs)}\n' \
+    constraints_string + \
     '  descriptors ' + " ".join(['\"' + key + '\"' for key in outputs]) + \
     '''
   no_gradients
@@ -161,12 +167,12 @@ def create_driver_file(template_dir, model_string, desvar_shapes, desired_output
     
     write_outputs_string = []
     for i, key in enumerate(desired_outputs):
-        string = f'f.write(str(float(outputs["{key}"]) * {output_scalers[i]}))'
+        string = f'f.write(str(float(outputs["{key}"]) * {output_scalers[i]}) + "\\n")'
         write_outputs_string.append(string)
         
     write_outputs_string = """
     {}
-    """.format("\n".join(write_outputs_string))
+    """.format("\n    ".join(write_outputs_string))
         
     # Create openmdao_driver.py
     driver_file = textwrap.dedent('''\
