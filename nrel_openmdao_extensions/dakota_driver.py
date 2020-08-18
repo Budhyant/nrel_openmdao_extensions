@@ -265,16 +265,3 @@ def do_full_optimization(template_dir, desvars, desired_outputs, bounds, model_s
     create_input_yaml(template_dir, desvar_labels)
     create_driver_file(template_dir, model_string, desvar_shapes, desired_outputs, output_scalers)
     run_dakota()
-
-
-if __name__ == "__main__":
-    template_dir = 'template_dir/'
-    desvars = {'x' : np.array([0.25])}
-    bounds = {'x' : np.array([[0.0, 1.0]])}
-    outputs = ['y']
-    output_scalers = [1.]
-    options = {}
-        
-    model_string = 'from multifidelity_studies.models.testbed_components import simple_1D_high_model as model'
-    
-    do_full_optimization(template_dir, desvars, outputs, bounds, model_string, output_scalers, options)

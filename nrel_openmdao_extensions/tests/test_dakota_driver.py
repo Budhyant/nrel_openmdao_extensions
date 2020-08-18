@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from nrel_openmdao_extensions.dakota_driver.run_dakota import do_full_optimization
+from nrel_openmdao_extensions.dakota_driver import do_full_optimization
 from openmdao.utils.assert_utils import assert_near_equal
 
 try:
